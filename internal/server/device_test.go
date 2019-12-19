@@ -1,10 +1,22 @@
 package server
 
 import (
+	"bytes"
+	"encoding/binary"
+	"errors"
 	"io"
+	"log"
 	"net"
+	"os"
+	"reflect"
 	"testing"
 	"time"
+)
+
+var (
+	// 15-bytes decimal numbers
+	testIMEI   = []byte{4, 9, 0, 1, 5, 4, 2, 0, 3, 2, 3, 7, 5, 1, 8}
+	testOutLog = log.New(os.Stdout, "", 0)
 )
 
 func Test_Device_ReadDeadline_Positive(t *testing.T) {
@@ -23,7 +35,7 @@ func Test_Device_ReadDeadline_Positive(t *testing.T) {
 
 		ld := time.Millisecond * 50
 		md := time.Millisecond * 50
-		d := newDevice(devConfig{loginDeadline: ld, messageDeadline: md}, conn)
+		d := newDevice(devConfig{loginDeadline: ld, messageDeadline: md}, conn, testOutLog)
 		err = d.run()
 		if err == io.EOF {
 			t.Logf("test server get EOF")
@@ -40,8 +52,7 @@ func Test_Device_ReadDeadline_Positive(t *testing.T) {
 	}
 
 	// send login
-	imei := make([]byte, imeiLength)
-	_, err = clnConn.Write(imei)
+	_, err = clnConn.Write(testIMEI)
 	if err != nil {
 		t.Fatalf("client conn write imei err: %v", err)
 	}
@@ -77,7 +88,7 @@ func Test_Device_LoginDeadline_Negative(t *testing.T) {
 
 		ld := time.Millisecond * 50
 		md := time.Millisecond * 50
-		d := newDevice(devConfig{loginDeadline: ld, messageDeadline: md}, conn)
+		d := newDevice(devConfig{loginDeadline: ld, messageDeadline: md}, conn, testOutLog)
 		err = d.run()
 		if e, ok := err.(net.Error); ok && e.Timeout() {
 			t.Logf("test server get i/o timeout")
@@ -117,7 +128,7 @@ func Test_Device_MessageDeadline_Negative(t *testing.T) {
 
 		ld := time.Millisecond * 50
 		md := time.Millisecond * 50
-		d := newDevice(devConfig{loginDeadline: ld, messageDeadline: md}, conn)
+		d := newDevice(devConfig{loginDeadline: ld, messageDeadline: md}, conn, testOutLog)
 		err = d.run()
 		if e, ok := err.(net.Error); ok && e.Timeout() {
 			t.Logf("test server get i/o timeout")
@@ -134,8 +145,7 @@ func Test_Device_MessageDeadline_Negative(t *testing.T) {
 	}
 
 	// send login
-	imei := make([]byte, imeiLength)
-	_, err = clnConn.Write(imei)
+	_, err = clnConn.Write(testIMEI)
 	if err != nil {
 		t.Fatalf("client conn write imei err: %v", err)
 	}
@@ -145,5 +155,138 @@ func Test_Device_MessageDeadline_Negative(t *testing.T) {
 	err = clnConn.Close()
 	if err != nil {
 		t.Fatalf("client conn close err: %v", err)
+	}
+}
+
+func Test_isValidIMEI(t *testing.T) {
+
+	testCases := []struct {
+		name string
+		imei []byte
+		err  error
+	}{
+		// Positive
+		{
+			name: "valid imei",
+			imei: []byte{4, 9, 0, 1, 5, 4, 2, 0, 3, 2, 3, 7, 5, 1, 8},
+			err:  nil,
+		},
+		// Negative
+		{
+			name: "invalid imei, wrong check",
+			imei: []byte{4, 9, 0, 1, 5, 4, 2, 0, 3, 2, 3, 7, 5, 1, 9},
+			err:  errors.New("imei wrong check"),
+		},
+		{
+			name: "invalid imei, wrong length",
+			imei: []byte{4, 9, 0, 1, 5, 4, 2, 0, 3, 2, 3, 7, 5, 1},
+			err:  errors.New("imei wrong length"),
+		},
+		{
+			name: "invalid imei, byte is not decimal",
+			imei: []byte{49, 9, 0, 1, 5, 4, 2, 0, 3, 2, 3, 7, 5, 1, 8},
+			err:  errors.New("imei should be decimal number (0-9)"),
+		},
+	}
+
+	for _, tc := range testCases {
+
+		imei, err := validParseIMEI(tc.imei)
+		if tc.err == nil && err != nil {
+			t.Fatalf("%v: imei %v is invalid, err: %v", tc.name, tc.imei, err)
+		} else if tc.err != nil && tc.err.Error() != err.Error() {
+			t.Fatalf("%v: imei %v, negative test case return wrong error: tc.err - %v, err - %v", tc.name, tc.imei, tc.err, err)
+		}
+		t.Logf("%v: imei %v, imei string %v, test ok", tc.name, tc.imei, imei)
+	}
+}
+
+func Test_bytesToFloat64(t *testing.T) {
+
+	f64 := 73.73
+
+	var buf bytes.Buffer
+	err := binary.Write(&buf, binary.BigEndian, f64)
+	if err != nil {
+		t.Fatalf("float 64 to bytes err: %v", err)
+	}
+
+	f, err := bytesToFloat64(buf.Bytes())
+	if err != nil {
+		t.Fatalf("bytes to float err: %v", err)
+	}
+
+	if f != f64 {
+		t.Fatalf("bytes to float converting result err: %v - %v", f64, f)
+	}
+	t.Logf("bytes to float converting OK: %v - %v", f64, f)
+}
+
+func Test_parseMessage_isValidReadMsg(t *testing.T) {
+
+	testCases := []struct {
+		name string
+		msg  readingMessage
+		err  error
+	}{
+		// Positive
+		{
+			name: "valid message",
+			msg: readingMessage{
+				Temp:    0.0,
+				Alt:     0.0,
+				Lat:     0.0,
+				Lon:     0.0,
+				BattLev: 0.0,
+			},
+			err: nil,
+		},
+		{
+			name: "valid message 2",
+			msg: readingMessage{
+				Temp:    -300.0,
+				Alt:     20000.0,
+				Lat:     -90.0,
+				Lon:     180.0,
+				BattLev: 100.0,
+			},
+			err: nil,
+		},
+		// Negative
+		{
+			name: "invalid message, temp out range",
+			msg: readingMessage{
+				Temp:    301.0,
+				Alt:     0.0,
+				Lat:     0.0,
+				Lon:     0.0,
+				BattLev: 0.0,
+			},
+			err: errors.New("message, temperatue is out range [-300, 300]"),
+		},
+	}
+
+	for _, tc := range testCases {
+
+		var buf bytes.Buffer
+		err := binary.Write(&buf, binary.BigEndian, tc.msg)
+		if err != nil {
+			t.Fatalf("message to bytes converting err: %v", err)
+		}
+
+		rm, err := parseMessage(buf.Bytes())
+		if err != nil {
+			t.Fatalf("parse message err: %v", err)
+		}
+		err = isValidReadMsg(rm)
+		if tc.err == nil && err != nil {
+			t.Fatalf("%v: message %+v is invalid, err: %v", tc.name, tc.msg, err)
+		} else if tc.err != nil && tc.err.Error() != err.Error() {
+			t.Fatalf("%v: message %+v, negative test case return wrong error: tc.err - %v, err - %v", tc.name, tc.msg, tc.err, err)
+		}
+		if !reflect.DeepEqual(tc.msg, rm) {
+			t.Fatalf("%v: orig message %+v and parsed %+v not equal", tc.name, tc.msg, rm)
+		}
+		t.Logf("%v: message %+v, test ok", tc.name, tc.msg)
 	}
 }
