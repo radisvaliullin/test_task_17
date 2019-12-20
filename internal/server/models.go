@@ -54,7 +54,7 @@ func (s *devStorage) ok(imei string) (devReq, bool) {
 
 type deviceStatus struct {
 	IMEI   string `json:"imei"`
-	Status string `json"status"`
+	Status string `json:"status"`
 }
 
 type deviceReadingStatus struct {

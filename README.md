@@ -23,3 +23,15 @@ go test ./... -cover
 cd internal/server
 go test -bench=.
 ```
+
+#### HTTP Server
+http://0.0.0.0:1338
+```
+GET /readings/:imei
+response:
+{"imei":"490154203237518","Status":"online","reading":{"Temp":0,"Alt":0,"Lat":0,"Lon":0,"BattLev":0},"time":1576833027211679121}
+
+GET /status/:imei
+response:
+{"imei":"490154203237518","Status":"online"}
+```
