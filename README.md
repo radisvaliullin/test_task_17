@@ -7,3 +7,19 @@ or
 ```
 docs/thermomatic.md
 ```
+
+## Run server
+```
+go run cmd/server/main.go
+```
+
+## Test
+```
+go test ./... -cover
+```
+
+## Bench
+```
+cd internal/server
+go test -bench=.
+```
