@@ -89,17 +89,21 @@ func (d *device) run() error {
 	imei := make([]byte, imeiLength)
 	// set login deadline
 	d.conn.SetReadDeadline(time.Now().Add(d.conf.loginDeadline))
+	// read imei
 	_, err := io.ReadFull(d.conn, imei)
 	if err != nil {
 		log.Printf("device, raddr - %v, read imei err: %v", d.raddr, err)
 		return err
 	}
+	// parse imei
 	d.imei, err = validParseIMEI(imei)
 	if err != nil {
 		log.Printf("device raddr - %v, imei validate err: %v", d.raddr, err)
 		return err
 	}
-	if ok := d.devStor.setIfNot(d.imei); !ok {
+	// register device by imei
+	dreq := make(devReq, 1)
+	if ok := d.devStor.setIfNot(d.imei, dreq); !ok {
 		log.Printf("device, raddr - %v, device with imei - %v yet registered", d.raddr, d.imei)
 		return fmt.Errorf("device with imei %v yet registered", d.imei)
 	}
@@ -134,6 +138,14 @@ func (d *device) run() error {
 		if err := isValidReadMsg(r); err == nil {
 			reading := fmt.Sprintf("%v,%s,%f,%f,%f,%f,%f\n", now, d.imei, r.Temp, r.Alt, r.Lat, r.Lon, r.BattLev)
 			d.outLog.Print(reading)
+
+			// response to request last reading
+			select {
+			case dresp := <-dreq:
+				dresp <- deviceReadingStatus{Reading: r, Time: now}
+				close(dresp)
+			default:
+			}
 		} else {
 			log.Printf("device, imei %v, invalid reading message %+v", d.imei, r)
 		}

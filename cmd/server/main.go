@@ -17,7 +17,10 @@ func main() {
 	outLog := log.New(os.Stdout, "", 0)
 
 	// new server init
-	s := server.New(server.Config{Addr: ":1337", LoginDeadline: time.Second, MsgDeadline: time.Second * 2}, outLog)
+	s := server.New(server.Config{
+		Addr: ":1337", HTTPAddr: ":1338", LoginDeadline: time.Second, MsgDeadline: time.Second * 2},
+		outLog,
+	)
 
 	log.Print("server starting")
 	err := s.Start()
