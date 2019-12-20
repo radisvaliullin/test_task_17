@@ -7,6 +7,7 @@ import (
 	"log"
 	"math"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -31,17 +32,26 @@ type device struct {
 
 	// outlog for logging Reading messages
 	outLog *log.Logger
+
+	// wg
+	wg *sync.WaitGroup
 }
 
 // inits new device
-func newDevice(conf devConfig, conn net.Conn, olg *log.Logger) *device {
-	return &device{conf: conf, conn: conn, raddr: conn.RemoteAddr().String(), outLog: olg}
+func newDevice(conf devConfig, conn net.Conn, olg *log.Logger, wg *sync.WaitGroup) *device {
+	return &device{conf: conf, conn: conn, raddr: conn.RemoteAddr().String(), outLog: olg, wg: wg}
 }
 
 // run handle new connection (responsible to close connection)
 func (d *device) run() error {
+	//
+	defer d.wg.Done()
 	// close connection
-	defer d.conn.Close()
+	defer func() {
+		if err := d.conn.Close(); err != nil {
+			log.Printf("device conn close err: %v", err)
+		}
+	}()
 
 	// device login
 	// imei read

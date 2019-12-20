@@ -9,14 +9,16 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 )
 
 var (
 	// 15-bytes decimal numbers
-	testIMEI   = []byte{4, 9, 0, 1, 5, 4, 2, 0, 3, 2, 3, 7, 5, 1, 8}
-	testOutLog = log.New(os.Stdout, "", 0)
+	testIMEI    = []byte{4, 9, 0, 1, 5, 4, 2, 0, 3, 2, 3, 7, 5, 1, 8}
+	testIMEIArr = [15]byte{4, 9, 0, 1, 5, 4, 2, 0, 3, 2, 3, 7, 5, 1, 8}
+	testOutLog  = log.New(os.Stdout, "", 0)
 )
 
 func Test_Device_ReadDeadline_Positive(t *testing.T) {
@@ -35,7 +37,9 @@ func Test_Device_ReadDeadline_Positive(t *testing.T) {
 
 		ld := time.Millisecond * 50
 		md := time.Millisecond * 50
-		d := newDevice(devConfig{loginDeadline: ld, messageDeadline: md}, conn, testOutLog)
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		d := newDevice(devConfig{loginDeadline: ld, messageDeadline: md}, conn, testOutLog, &wg)
 		err = d.run()
 		if err == io.EOF {
 			t.Logf("test server get EOF")
@@ -88,7 +92,9 @@ func Test_Device_LoginDeadline_Negative(t *testing.T) {
 
 		ld := time.Millisecond * 50
 		md := time.Millisecond * 50
-		d := newDevice(devConfig{loginDeadline: ld, messageDeadline: md}, conn, testOutLog)
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		d := newDevice(devConfig{loginDeadline: ld, messageDeadline: md}, conn, testOutLog, &wg)
 		err = d.run()
 		if e, ok := err.(net.Error); ok && e.Timeout() {
 			t.Logf("test server get i/o timeout")
@@ -128,7 +134,9 @@ func Test_Device_MessageDeadline_Negative(t *testing.T) {
 
 		ld := time.Millisecond * 50
 		md := time.Millisecond * 50
-		d := newDevice(devConfig{loginDeadline: ld, messageDeadline: md}, conn, testOutLog)
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		d := newDevice(devConfig{loginDeadline: ld, messageDeadline: md}, conn, testOutLog, &wg)
 		err = d.run()
 		if e, ok := err.(net.Error); ok && e.Timeout() {
 			t.Logf("test server get i/o timeout")
