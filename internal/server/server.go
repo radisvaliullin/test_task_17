@@ -62,6 +62,7 @@ func (s *Server) Start() error {
 	}
 	s.ln = ln
 
+	s.wg.Add(1)
 	go func() {
 		if err := s.run(); err != nil {
 			s.errs <- err
@@ -89,6 +90,7 @@ func (s *Server) Error() <-chan error {
 }
 
 func (s *Server) run() error {
+	defer s.wg.Done()
 
 	for {
 		log.Print("server, waiting new client")

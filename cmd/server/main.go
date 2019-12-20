@@ -20,5 +20,9 @@ func main() {
 	s := server.New(server.Config{Addr: ":1337", LoginDeadline: time.Second, MsgDeadline: time.Second * 2}, outLog)
 
 	log.Print("server starting")
-	s.Start()
+	err := s.Start()
+	if err != nil {
+		log.Fatalf("server starting err: %v", err)
+	}
+	s.Wait()
 }
