@@ -33,14 +33,18 @@ type Server struct {
 
 	// server error
 	errs chan error
+
+	//
+	devStor *devStorage
 }
 
 // New inits new Server.
 func New(conf Config, olg *log.Logger) *Server {
 	s := &Server{
-		conf:   conf,
-		outLog: olg,
-		errs:   make(chan error, 1),
+		conf:    conf,
+		outLog:  olg,
+		errs:    make(chan error, 1),
+		devStor: newDevStorage(),
 	}
 	return s
 }
@@ -102,7 +106,10 @@ func (s *Server) run() error {
 
 		// connection (device) handler responsible for close connection
 		s.wg.Add(1)
-		d := newDevice(devConfig{loginDeadline: s.conf.LoginDeadline, messageDeadline: s.conf.MsgDeadline}, conn, s.outLog, &s.wg, stop)
+		d := newDevice(
+			devConfig{loginDeadline: s.conf.LoginDeadline, messageDeadline: s.conf.MsgDeadline},
+			conn, s.outLog, &s.wg, stop, s.devStor,
+		)
 		go d.run()
 	}
 

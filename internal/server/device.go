@@ -30,6 +30,9 @@ type device struct {
 	raddr string
 	imei  string
 
+	// dev stor
+	devStor *devStorage
+
 	// outlog for logging Reading messages
 	outLog *log.Logger
 
@@ -40,7 +43,9 @@ type device struct {
 }
 
 // inits new device
-func newDevice(conf devConfig, conn net.Conn, olg *log.Logger, wg *sync.WaitGroup, stop chan struct{}) *device {
+func newDevice(
+	conf devConfig, conn net.Conn, olg *log.Logger, wg *sync.WaitGroup, stop chan struct{}, ds *devStorage,
+) *device {
 	d := &device{
 		conf:    conf,
 		conn:    conn,
@@ -48,6 +53,7 @@ func newDevice(conf devConfig, conn net.Conn, olg *log.Logger, wg *sync.WaitGrou
 		outLog:  olg,
 		wg:      wg,
 		srvStop: stop,
+		devStor: ds,
 	}
 	return d
 }
@@ -93,6 +99,14 @@ func (d *device) run() error {
 		log.Printf("device raddr - %v, imei validate err: %v", d.raddr, err)
 		return err
 	}
+	if ok := d.devStor.setIfNot(d.imei); !ok {
+		log.Printf("device, raddr - %v, device with imei - %v yet registered", d.raddr, d.imei)
+		return fmt.Errorf("device with imei %v yet registered", d.imei)
+	}
+	// unregister when connection closed
+	defer func() {
+		d.devStor.delete(d.imei)
+	}()
 	log.Printf("device logged, raddr - %v, imei %v", d.raddr, d.imei)
 
 	// read messages in cycle
