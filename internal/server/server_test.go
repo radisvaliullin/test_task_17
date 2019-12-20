@@ -42,6 +42,38 @@ func Test_Server(t *testing.T) {
 
 }
 
+func Test_Server_Stop(t *testing.T) {
+
+	// new server init
+	s := New(Config{Addr: testSrvAddr, LoginDeadline: time.Millisecond * 50, MsgDeadline: time.Millisecond * 50}, testOutLog)
+	// start server
+	err := s.Start()
+	if err != nil {
+		t.Fatalf("server start err: %v", err)
+	}
+
+	// test client
+	tc := NewTestClient(TestClientConfig{SrvAddr: testSrvAddr, IMEI: testIMEIArr, PeriodDuration: time.Millisecond * 25})
+	tc.Start()
+
+	// wait while client sent few messages
+	time.Sleep(time.Millisecond * 50)
+
+	// stop server
+	s.Stop()
+	s.Wait()
+
+	// stop client
+	// tc.Stop()
+	tc.Wait()
+	select {
+	case err := <-tc.Error():
+		t.Logf("test client running err: %v", err)
+	default:
+		t.Fatalf("test client stopped")
+	}
+}
+
 func Test_Server_MultiClient(t *testing.T) {
 
 	// new server init
@@ -81,7 +113,6 @@ func Test_Server_MultiClient(t *testing.T) {
 	// stop server
 	s.Stop()
 	s.Wait()
-
 }
 
 func BenchmarkServer(b *testing.B) {

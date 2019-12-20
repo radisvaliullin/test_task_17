@@ -35,21 +35,45 @@ type device struct {
 
 	// wg
 	wg *sync.WaitGroup
+	// server stop sig
+	srvStop chan struct{}
 }
 
 // inits new device
-func newDevice(conf devConfig, conn net.Conn, olg *log.Logger, wg *sync.WaitGroup) *device {
-	return &device{conf: conf, conn: conn, raddr: conn.RemoteAddr().String(), outLog: olg, wg: wg}
+func newDevice(conf devConfig, conn net.Conn, olg *log.Logger, wg *sync.WaitGroup, stop chan struct{}) *device {
+	d := &device{
+		conf:    conf,
+		conn:    conn,
+		raddr:   conn.RemoteAddr().String(),
+		outLog:  olg,
+		wg:      wg,
+		srvStop: stop,
+	}
+	return d
 }
 
 // run handle new connection (responsible to close connection)
 func (d *device) run() error {
+	// stopped signal
+	stopped := make(chan struct{}, 1)
 	//
 	defer d.wg.Done()
 	// close connection
 	defer func() {
+		stopped <- struct{}{}
 		if err := d.conn.Close(); err != nil {
 			log.Printf("device conn close err: %v", err)
+		}
+	}()
+	// server stop handler
+	go func() {
+		select {
+		case <-stopped:
+		case <-d.srvStop:
+			if err := d.conn.Close(); err != nil {
+				log.Printf("device conn close err: %v", err)
+			}
+			d.srvStop <- struct{}{}
 		}
 	}()
 

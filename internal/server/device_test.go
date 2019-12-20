@@ -39,7 +39,8 @@ func Test_Device_ReadDeadline_Positive(t *testing.T) {
 		md := time.Millisecond * 50
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		d := newDevice(devConfig{loginDeadline: ld, messageDeadline: md}, conn, testOutLog, &wg)
+		stop := make(chan struct{}, 1)
+		d := newDevice(devConfig{loginDeadline: ld, messageDeadline: md}, conn, testOutLog, &wg, stop)
 		err = d.run()
 		if err == io.EOF {
 			t.Logf("test server get EOF")
@@ -94,7 +95,8 @@ func Test_Device_LoginDeadline_Negative(t *testing.T) {
 		md := time.Millisecond * 50
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		d := newDevice(devConfig{loginDeadline: ld, messageDeadline: md}, conn, testOutLog, &wg)
+		stop := make(chan struct{}, 1)
+		d := newDevice(devConfig{loginDeadline: ld, messageDeadline: md}, conn, testOutLog, &wg, stop)
 		err = d.run()
 		if e, ok := err.(net.Error); ok && e.Timeout() {
 			t.Logf("test server get i/o timeout")
@@ -136,7 +138,8 @@ func Test_Device_MessageDeadline_Negative(t *testing.T) {
 		md := time.Millisecond * 50
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		d := newDevice(devConfig{loginDeadline: ld, messageDeadline: md}, conn, testOutLog, &wg)
+		stop := make(chan struct{}, 1)
+		d := newDevice(devConfig{loginDeadline: ld, messageDeadline: md}, conn, testOutLog, &wg, stop)
 		err = d.run()
 		if e, ok := err.(net.Error); ok && e.Timeout() {
 			t.Logf("test server get i/o timeout")

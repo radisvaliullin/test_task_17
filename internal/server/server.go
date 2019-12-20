@@ -28,15 +28,11 @@ type Server struct {
 	// listener
 	ln net.Listener
 
-	// stop signal
-	stop chan struct{}
-	wg   sync.WaitGroup
+	// wg
+	wg sync.WaitGroup
 
 	// server error
 	errs chan error
-
-	// connections store
-	conns []net.Conn
 }
 
 // New inits new Server.
@@ -44,9 +40,7 @@ func New(conf Config, olg *log.Logger) *Server {
 	s := &Server{
 		conf:   conf,
 		outLog: olg,
-		stop:   make(chan struct{}, 1),
 		errs:   make(chan error, 1),
-		conns:  make([]net.Conn, 0, 1000),
 	}
 	return s
 }
@@ -91,6 +85,11 @@ func (s *Server) Error() <-chan error {
 
 func (s *Server) run() error {
 	defer s.wg.Done()
+	// stop handler signal
+	stop := make(chan struct{}, 1)
+	defer func() {
+		stop <- struct{}{}
+	}()
 
 	for {
 		log.Print("server, waiting new client")
@@ -103,16 +102,9 @@ func (s *Server) run() error {
 
 		// connection (device) handler responsible for close connection
 		s.wg.Add(1)
-		s.conns = append(s.conns, conn)
-		d := newDevice(devConfig{loginDeadline: s.conf.LoginDeadline, messageDeadline: s.conf.MsgDeadline}, conn, s.outLog, &s.wg)
+		d := newDevice(devConfig{loginDeadline: s.conf.LoginDeadline, messageDeadline: s.conf.MsgDeadline}, conn, s.outLog, &s.wg, stop)
 		go d.run()
 	}
 
-	// abort handlers
-	for _, c := range s.conns {
-		if err := c.Close(); err != nil {
-			log.Printf("server conns, conn close err: %v", err)
-		}
-	}
 	return nil
 }
