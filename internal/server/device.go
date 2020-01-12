@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -115,6 +116,7 @@ func (d *device) run() error {
 
 	// read messages in cycle
 	msg := make([]byte, 40)
+	rm := readingMessage{}
 	for {
 
 		// read message
@@ -127,27 +129,23 @@ func (d *device) run() error {
 		now := time.Now().UnixNano()
 
 		// parse message
-		r, err := parseMessage(msg)
-		if err != nil {
-			log.Printf("device, imei - %v, message parse err: %v", d.imei, err)
-			return err
-		}
-		log.Printf("device, imei - %v, read message %+v", d.imei, r)
+		parseMessage(msg, &rm)
+		log.Printf("device, imei - %v, read message %+v", d.imei, rm)
 
 		// if valid, logging Reading message to stdout
-		if err := isValidReadMsg(r); err == nil {
-			reading := fmt.Sprintf("%v,%s,%f,%f,%f,%f,%f\n", now, d.imei, r.Temp, r.Alt, r.Lat, r.Lon, r.BattLev)
+		if rm.isValid() {
+			reading := fmt.Sprintf("%v,%s,%f,%f,%f,%f,%f\n", now, d.imei, rm.Temp, rm.Alt, rm.Lat, rm.Lon, rm.BattLev)
 			d.outLog.Print(reading)
 
 			// response to request last reading
 			select {
 			case dresp := <-dreq:
-				dresp <- deviceReadingStatus{Reading: r, Time: now}
+				dresp <- deviceReadingStatus{Reading: rm, Time: now}
 				close(dresp)
 			default:
 			}
 		} else {
-			log.Printf("device, imei %v, invalid reading message %+v", d.imei, r)
+			log.Printf("device, imei %v, invalid reading message %+v", d.imei, rm)
 		}
 	}
 }
@@ -189,77 +187,18 @@ func validParseIMEI(imei []byte) (string, error) {
 }
 
 // parse Reading message
-func parseMessage(msg []byte) (readingMessage, error) {
-
-	rm := readingMessage{}
-
-	if len(msg) != msgLength {
-		return rm, errors.New("message wrong length")
-	}
-
-	var err error
-	// temp
-	rm.Temp, err = bytesToFloat64(msg[:8])
-	if err != nil {
-		return rm, err
-	}
-	// alt
-	rm.Alt, err = bytesToFloat64(msg[8:16])
-	if err != nil {
-		return rm, err
-	}
-	// lat
-	rm.Lat, err = bytesToFloat64(msg[16:24])
-	if err != nil {
-		return rm, err
-	}
-	// lon
-	rm.Lon, err = bytesToFloat64(msg[24:32])
-	if err != nil {
-		return rm, err
-	}
-	// battery level
-	rm.BattLev, err = bytesToFloat64(msg[32:])
-	if err != nil {
-		return rm, err
-	}
-
-	return rm, nil
+func parseMessage(msg []byte, rm *readingMessage) {
+	// panic if len less then message length
+	_ = msg[msgLength-1]
+	//
+	rm.Temp = bytesToFloat64(msg[:8])
+	rm.Alt = bytesToFloat64(msg[8:16])
+	rm.Lat = bytesToFloat64(msg[16:24])
+	rm.Lon = bytesToFloat64(msg[24:32])
+	rm.BattLev = bytesToFloat64(msg[32:])
 }
 
 // covert 8-bytes to float64
-func bytesToFloat64(b []byte) (float64, error) {
-
-	if len(b) != 8 {
-		return 0.0, errors.New("bytes length should be 8")
-	}
-	ui64 := (uint64(b[0]) << 56) | (uint64(b[1]) << 48) | (uint64(b[2]) << 40) | (uint64(b[3]) << 32)
-	ui64 |= (uint64(b[4]) << 24) | (uint64(b[5]) << 16) | (uint64(b[6]) << 8) | uint64(b[7])
-
-	return math.Float64frombits(ui64), nil
-}
-
-// validate Reading message
-func isValidReadMsg(rm readingMessage) error {
-	// temp
-	if rm.Temp < -300.0 || rm.Temp > 300.0 {
-		return errors.New("message, temperatue is out range [-300, 300]")
-	}
-	// alt
-	if rm.Alt < -20000.0 || rm.Alt > 20000.0 {
-		return errors.New("message, altitude is out range [-300, 300]")
-	}
-	// lat
-	if rm.Lat < -90.0 || rm.Lat > 90.0 {
-		return errors.New("message, altitude is out range [-300, 300]")
-	}
-	// lon
-	if rm.Lon < -180.0 || rm.Lon > 180.0 {
-		return errors.New("message, longitude is out range [-300, 300]")
-	}
-	// battery level
-	if rm.BattLev < 0.0 || rm.BattLev > 100.0 {
-		return errors.New("message, battery level is out range [-300, 300]")
-	}
-	return nil
+func bytesToFloat64(b []byte) float64 {
+	return math.Float64frombits(binary.BigEndian.Uint64(b))
 }

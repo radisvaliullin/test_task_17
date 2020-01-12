@@ -10,6 +10,26 @@ type readingMessage struct {
 	BattLev float64
 }
 
+func (m *readingMessage) isValid() bool {
+	return isRange(m.Temp, -300, 300, true) &&
+		isRange(m.Alt, -20_000, 20_000, true) &&
+		isRange(m.Lat, -90, 90, true) &&
+		isRange(m.Lon, -180, 180, true) &&
+		isRange(m.BattLev, 0, 100, false)
+}
+
+func isRange(v, min, max float64, minInclusive bool) bool {
+	if v > max {
+		return false
+	}
+	if minInclusive && v < min {
+		return false
+	} else if !minInclusive && v <= min {
+		return false
+	}
+	return true
+}
+
 //
 type devReq chan devReqResp
 type devReqResp chan deviceReadingStatus

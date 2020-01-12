@@ -222,7 +222,7 @@ func Test_bytesToFloat64(t *testing.T) {
 		t.Fatalf("float 64 to bytes err: %v", err)
 	}
 
-	f, err := bytesToFloat64(buf.Bytes())
+	f := bytesToFloat64(buf.Bytes())
 	if err != nil {
 		t.Fatalf("bytes to float err: %v", err)
 	}
@@ -236,9 +236,9 @@ func Test_bytesToFloat64(t *testing.T) {
 func Test_parseMessage_isValidReadMsg(t *testing.T) {
 
 	testCases := []struct {
-		name string
-		msg  readingMessage
-		err  error
+		name    string
+		msg     readingMessage
+		isValid bool
 	}{
 		// Positive
 		{
@@ -248,9 +248,9 @@ func Test_parseMessage_isValidReadMsg(t *testing.T) {
 				Alt:     0.0,
 				Lat:     0.0,
 				Lon:     0.0,
-				BattLev: 0.0,
+				BattLev: 0.1,
 			},
-			err: nil,
+			isValid: true,
 		},
 		{
 			name: "valid message 2",
@@ -261,7 +261,7 @@ func Test_parseMessage_isValidReadMsg(t *testing.T) {
 				Lon:     180.0,
 				BattLev: 100.0,
 			},
-			err: nil,
+			isValid: true,
 		},
 		// Negative
 		{
@@ -271,9 +271,20 @@ func Test_parseMessage_isValidReadMsg(t *testing.T) {
 				Alt:     0.0,
 				Lat:     0.0,
 				Lon:     0.0,
+				BattLev: 0.1,
+			},
+			isValid: false,
+		},
+		{
+			name: "invalid message, battery out range",
+			msg: readingMessage{
+				Temp:    300.0,
+				Alt:     0.0,
+				Lat:     0.0,
+				Lon:     0.0,
 				BattLev: 0.0,
 			},
-			err: errors.New("message, temperatue is out range [-300, 300]"),
+			isValid: false,
 		},
 	}
 
@@ -285,15 +296,13 @@ func Test_parseMessage_isValidReadMsg(t *testing.T) {
 			t.Fatalf("message to bytes converting err: %v", err)
 		}
 
-		rm, err := parseMessage(buf.Bytes())
-		if err != nil {
-			t.Fatalf("parse message err: %v", err)
-		}
-		err = isValidReadMsg(rm)
-		if tc.err == nil && err != nil {
-			t.Fatalf("%v: message %+v is invalid, err: %v", tc.name, tc.msg, err)
-		} else if tc.err != nil && tc.err.Error() != err.Error() {
-			t.Fatalf("%v: message %+v, negative test case return wrong error: tc.err - %v, err - %v", tc.name, tc.msg, tc.err, err)
+		rm := readingMessage{}
+		parseMessage(buf.Bytes(), &rm)
+		ok := rm.isValid()
+		if tc.isValid && !ok {
+			t.Fatalf("%v: message %+v is invalid, parsed msg - %+v", tc.name, tc.msg, rm)
+		} else if !tc.isValid && ok {
+			t.Fatalf("%v: message %+v, negative test case shoud return not ok: parsed msg %+v", tc.name, tc.msg, rm)
 		}
 		if !reflect.DeepEqual(tc.msg, rm) {
 			t.Fatalf("%v: orig message %+v and parsed %+v not equal", tc.name, tc.msg, rm)
